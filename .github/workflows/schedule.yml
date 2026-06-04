@@ -3,7 +3,7 @@ name: update schedule
 on:
   schedule:
     - cron: "0 */2 * * *"
-  workflow_dispatch:
+  workflow_dispatch:  # 允许手动触发测试
 
 permissions:
   contents: write
@@ -36,34 +36,34 @@ jobs:
         id: pnpm-store
         shell: bash
         run: |
-            echo "STORE_PATH=$(pnpm store path --silent) >> $GITHUB_OUTPUT
+            echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
       - name: Setup pnpm cache
         uses: actions/cache@v3
         with:
           path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml' }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
       - run: pnpm install
       - run: pnpm build
       - run: pnpm m3u
 
-      # ========== 关键修复：在部署前删除大文件 ==========
-      - name: Remove oversized epg files
+      # ========== 新增：删除超过 25MB 的 EPG 文件 ==========
+      - name: Remove oversized epg file
         run: |
           echo "=== Before removal ==="
-          find . -name "epg_pw.xml" -type f -exec ls -lh {} \;
+          du -sh m3u/epg/* 2>/dev/null || echo "No epg files found"
           
-          # 强力删除所有 epg_pw.xml 文件
-          find . -name "epg_pw.xml" -type f -delete
+          # 删除 epg_pw.xml（epg.pw 源，通常 30MB+）
+          rm -f m3u/epg/epg_pw.xml
           
-          # 同时检查 epg 目录是否有其他大文件
-          echo "=== EPG directory contents ==="
-          ls -lh epg/ 2>/dev/null || echo "No epg/ dir in root"
-          find . -path "*/epg/*" -type f -exec ls -lh {} \;
+          # 也可以选择按大小自动删除：删除大于 24MB 的文件
+          # find m3u/epg -type f -size +24M -exec rm -f {} \;
           
           echo "=== After removal ==="
-          find . -name "epg_pw.xml" -type f || echo "Successfully removed"
+          du -sh m3u/epg/* 2>/dev/null || echo "No epg files found"
+          echo "=== Total site size ==="
+          du -sh m3u/
 
       - run: sudo apt-get install -y tree
 
@@ -76,16 +76,6 @@ jobs:
           if [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
             pnpm static
             tree m3u
-            
-            # 再次确认大文件已被删除
-            find m3u -name "epg_pw.xml" -type f -exec rm -f {} \;
-            
-            # 检查最终大小
-            echo "=== Final site size check ==="
-            du -sh m3u/
-            echo "=== Files over 20MB ==="
-            find m3u -type f -size +20M -exec ls -lh {} \; || echo "None found"
-            
             npx wrangler pages deploy m3u --project-name="${PROJECT_NAME}"
           else
             git config user.name "github-actions[bot]"
