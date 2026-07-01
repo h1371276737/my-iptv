@@ -3,7 +3,7 @@ name: update schedule
 on:
   schedule:
     - cron: "0 */2 * * *"
-  workflow_dispatch:  # 允许手动触发测试
+  workflow_dispatch:  # ← 添加这行，允许手动触发测试
 
 permissions:
   contents: write
@@ -16,21 +16,21 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
-
+        node-version: [24.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
 
-      - name: Use Node.js
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: ${{ matrix.node-version }}
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11
           run_install: false
       - name: Get pnpm store directory
         id: pnpm-store
@@ -67,7 +67,7 @@ jobs:
 
       - run: sudo apt-get install -y tree
 
-      - name: Publish m3u to Cloudflare Pages
+      - name: Publish m3u (Cloudflare direct upload or empty commit)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
