@@ -3,6 +3,18 @@ import 'dotenv/config';
 import * as OpenCC from 'opencc-js';
 import { collectM3uSource, get_github_raw_proxy_url } from '../utils';
 
+export interface TSourceFilterResult {
+  /**
+   * 输出文件名（不含扩展名）。
+   * 可以带 `/` 分隔的文件夹前缀，如 `fmml/ipv6`，
+   * 会输出到 m3u/fmml/ipv6.m3u、m3u/txt/fmml/ipv6.txt 等。
+   * 请统一使用 `/`（而非 `\`），因为同一个值也会被拼进 URL。
+   */
+  filename: string;
+  m3u: string;
+  channelCount: number;
+}
+
 export interface ISource {
   name: string;
   f_name: string;
@@ -10,11 +22,16 @@ export interface ISource {
   filter: (
     raw: string,
     caller: 'normal' | 'skip' | 'rollback',
-    collectFn?: (k: string, v: string) => void
-  ) => [string, number];
+    collectFn: ((k: string, v: string) => void) | undefined,
+    filename: string
+  ) => TSourceFilterResult | TSourceFilterResult[];
 }
 
 export type TSources = ISource[];
+
+export const normalizeSourceFilterResults = (
+  result: TSourceFilterResult | TSourceFilterResult[]
+): TSourceFilterResult[] => (Array.isArray(result) ? result : [result]);
 
 export const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
 
@@ -53,7 +70,12 @@ export const with_github_raw_url_proxy = (u: string) => {
     : `${get_github_raw_proxy_url()}/${u}`;
 };
 
-export const default_m3u_filter: ISource['filter'] = (raw, caller, collectFn): [string, number] => {
+export const default_m3u_filter: ISource['filter'] = (
+  raw,
+  caller,
+  collectFn,
+  filename
+): TSourceFilterResult => {
   const rawArray = handle_m3u(raw);
 
   if (caller === 'normal' && collectFn) {
@@ -62,10 +84,19 @@ export const default_m3u_filter: ISource['filter'] = (raw, caller, collectFn): [
     }
   }
 
-  return [rawArray.join('\n'), (rawArray.length - 1) / 2];
+  return {
+    filename,
+    m3u: rawArray.join('\n'),
+    channelCount: (rawArray.length - 1) / 2,
+  };
 };
 
-export const default_txt_filter: ISource['filter'] = (raw, caller, collectFn): [string, number] => {
+export const default_txt_filter: ISource['filter'] = (
+  raw,
+  caller,
+  collectFn,
+  filename
+): TSourceFilterResult => {
   const rawArray = raw
     .trim()
     .replace(/\r/g, '')
@@ -95,5 +126,5 @@ tvg-logo="https://tv-res.pages.dev/logo/${logoName}.png" group-title="${group}",
     }
   }
 
-  return [m3uLines.join('\n'), count];
+  return { filename, m3u: m3uLines.join('\n'), channelCount: count };
 };

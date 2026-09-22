@@ -11,8 +11,92 @@ export interface IREADMESource {
   count?: number | undefined;
 }
 
-export type TREADMESources = IREADMESource[];
+export type TREADMESources = IREADMESource[][];
+export type TREADMESourceResult = [status: string, channelCount: number | undefined];
+export type TREADMESourceResults = TREADMESourceResult[][];
 export type TREADMEEPGSources = TEPGSource[];
+
+const QWERTTVV_SOURCE_PREFIX = 'qwerttvv/';
+const LAN_IP_FILENAME_SUFFIX = /_(192_168_\d+|10_0_0)$/;
+
+const getLanIpDetails = (sourceGroup: IREADMESource[]) =>
+  sourceGroup
+    .map((source) => {
+      const match = LAN_IP_FILENAME_SUFFIX.exec(source.f_name);
+      if (!match) return undefined;
+
+      return {
+        ip: `${match[1].replace(/_/g, '.')}.1`,
+        source,
+      };
+    })
+    .filter((detail): detail is { ip: string; source: IREADMESource } => detail !== undefined);
+
+const getMoreListName = (sourceGroup: IREADMESource[]) => {
+  const firstSource = sourceGroup[0];
+  if (!firstSource) return undefined;
+
+  return firstSource.f_name.replace(LAN_IP_FILENAME_SUFFIX, '');
+};
+
+export const renderLanIpList = (sourceGroup: IREADMESource[]) => {
+  const source = sourceGroup[0];
+  if (!source) return '';
+
+  const links = getLanIpDetails(sourceGroup)
+    .map(({ ip, source: ipSource }) => `- [${ip}](/list/${ipSource.f_name}.list)`)
+    .join('\n');
+
+  return `# LAN IPs for **${source.name}**\n\n${links}\n\nUpdated at **${new Date()}**`;
+};
+
+const writeLanIpLists = (sources: TREADMESources) => {
+  const listPath = path.join(path.resolve(), 'm3u', 'list');
+
+  sources.forEach((sourceGroup) => {
+    const source = sourceGroup[0];
+    const moreListName = getMoreListName(sourceGroup);
+
+    if (
+      !source?.name.startsWith(QWERTTVV_SOURCE_PREFIX) ||
+      sourceGroup.length <= 1 ||
+      !moreListName
+    ) {
+      return;
+    }
+
+    fs.mkdirSync(listPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(listPath, `${moreListName}.more.list.md`),
+      renderLanIpList(sourceGroup)
+    );
+  });
+};
+
+export const renderSourceRows = (sources: TREADMESources, sourcesResults: TREADMESourceResults) =>
+  sources
+    .map((sourceGroup, index) => {
+      const source = sourceGroup[0];
+      const sourceResult = sourcesResults[index]?.[0];
+
+      if (!source) return '';
+
+      const moreListName = getMoreListName(sourceGroup);
+      const moreLink =
+        source.name.startsWith(QWERTTVV_SOURCE_PREFIX) && sourceGroup.length > 1 && moreListName
+          ? `<br> **[局域网 IP 列表](/list/${moreListName}.more.list)**`
+          : '';
+
+      return `| ${source.name} | [${source.f_name}.m3u](/${source.f_name}.m3u) <br> [${
+        source.f_name
+      }.txt](/txt/${source.f_name}.txt) | [List for ${source.name}](/list/${
+        source.f_name
+      }.list)${moreLink} | ${
+        sourceResult?.[1] === undefined ? 'update failed' : sourceResult[1]
+      } | ${sourceResult?.[0] === 'rollback' ? '✅' : '-'} |`;
+    })
+    .filter(Boolean)
+    .join('\n');
 
 export const updateChannelList = (
   name: string,
@@ -52,17 +136,17 @@ export const updateChannelList = (
     );
 
   const list_p = path.join(path.resolve(), 'm3u', 'list');
+  // f_name 可能带文件夹前缀（如 `fmml/ipv6`），需要递归创建父目录
+  const list_file = path.join(list_p, ...f_name.split('/').filter(Boolean)) + '.list.md';
 
-  if (!fs.existsSync(list_p)) {
-    fs.mkdirSync(list_p);
-  }
+  fs.mkdirSync(path.dirname(list_file), { recursive: true });
 
-  fs.writeFileSync(path.join(list_p, `${f_name}.list.md`), after);
+  fs.writeFileSync(list_file, after);
 };
 
 export const updateReadme = (
   sources: TREADMESources,
-  sources_res: Array<[string, number | undefined]>,
+  sources_res: TREADMESourceResults,
   epgs: TREADMEEPGSources,
   epgs_res: Array<[string | undefined]>
 ) => {
@@ -70,19 +154,7 @@ export const updateReadme = (
   const readme = fs.readFileSync(readme_temp_p, 'utf8').toString();
 
   const after = readme
-    .replace(
-      '<!-- channels_here -->',
-      `${sources
-        ?.map(
-          (s, idx) =>
-            `| ${s.name} | [${s.f_name}.m3u](/${s.f_name}.m3u) <br> [${s.f_name}.txt](/txt/${
-              s.f_name
-            }.txt) | [List for ${s.name}](/list/${s.f_name}.list) | ${
-              sources_res?.[idx]?.[1] === undefined ? 'update failed' : sources_res[idx][1]
-            } | ${sources_res?.[idx]?.[0] === 'rollback' ? '✅' : '-'} |`
-        )
-        .join('\n')}`
-    )
+    .replace('<!-- channels_here -->', renderSourceRows(sources, sources_res))
     .replace(
       '<!-- epgs_here -->',
       `${epgs
@@ -101,6 +173,8 @@ export const updateReadme = (
 
 \n\nUpdated at **${new Date()}**`
     );
+
+  writeLanIpLists(sources);
 
   if (!fs.existsSync(path.join(path.resolve(), 'm3u'))) {
     fs.mkdirSync(path.join(path.resolve(), 'm3u'));
