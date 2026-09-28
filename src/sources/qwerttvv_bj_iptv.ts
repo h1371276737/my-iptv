@@ -38,7 +38,7 @@ export const qwerttvv_bj_iptv_filter: ISource['filter'] = (
     }
 
     return {
-      filename: `${filename}_${lanIpPrefix.replace(/\./g, '_')}`,
+      filename: `bj_iptv/${filename}_${lanIpPrefix.replace(/\./g, '_')}`,
       m3u: result.join('\n'),
       channelCount,
     };

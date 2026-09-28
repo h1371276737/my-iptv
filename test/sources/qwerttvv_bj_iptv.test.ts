@@ -19,9 +19,9 @@ describe('qwerttvv_bj_iptv_filter', () => {
 
     expect(LAN_IP_PREFIXES).toHaveLength(257);
     expect(results).toHaveLength(257);
-    expect(results[0].filename).toBe('q_bj_iptv_192_168_0');
-    expect(results[255].filename).toBe('q_bj_iptv_192_168_255');
-    expect(results[256].filename).toBe('q_bj_iptv_10_0_0');
+    expect(results[0].filename).toBe('bj_iptv/q_bj_iptv_192_168_0');
+    expect(results[255].filename).toBe('bj_iptv/q_bj_iptv_192_168_255');
+    expect(results[256].filename).toBe('bj_iptv/q_bj_iptv_10_0_0');
     expect(new Set(results.map(({ filename }) => filename)).size).toBe(257);
   });
 
@@ -29,7 +29,7 @@ describe('qwerttvv_bj_iptv_filter', () => {
     const results = normalizeSourceFilterResults(
       qwerttvv_bj_iptv_filter(raw, 'skip', undefined, 'q_bj_iptv')
     );
-    const result = results.find(({ filename }) => filename === 'q_bj_iptv_192_168_31');
+    const result = results.find(({ filename }) => filename === 'bj_iptv/q_bj_iptv_192_168_31');
 
     expect(result).toBeDefined();
     expect(result?.m3u).toContain('http://192.168.31.1:23234/rtp/239.3.1.118:8001');
